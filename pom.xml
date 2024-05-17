@@ -9,7 +9,7 @@
   </parent>
 
   <artifactId>vertx-cassandra-client</artifactId>
-  <version>4.5.7</version>
+  <version>4.5.7-WL</version>
 
   <properties>
     <stack.version>4.5.7</stack.version>

@@ -15,6 +15,7 @@
  */
 package io.vertx.cassandra.impl;
 
+import com.datastax.oss.driver.api.core.cql.AsyncResultSet;
 import com.datastax.oss.driver.api.core.cql.ColumnDefinitions;
 import com.datastax.oss.driver.api.core.cql.ExecutionInfo;
 import com.datastax.oss.driver.api.core.cql.Row;
@@ -37,7 +38,9 @@ public class CassandraRowStreamImpl implements CassandraRowStream {
 
   private final Context context;
   private final ResultSet resultSet;
-  private final InboundBuffer<Row> internalQueue;
+  private com.datastax.oss.driver.api.core.cql.AsyncResultSet realResultSet;
+
+  private final InboundBuffer<RowResultSet> internalQueue;
 
   private State state;
   private int inFlight;
@@ -48,7 +51,7 @@ public class CassandraRowStreamImpl implements CassandraRowStream {
   public CassandraRowStreamImpl(Context context, ResultSet resultSet) {
     this.context = context;
     this.resultSet = resultSet;
-    internalQueue = new InboundBuffer<Row>(context)
+    internalQueue = new InboundBuffer<RowResultSet>(context)
       .exceptionHandler(this::handleException)
       .drainHandler(v -> fetchRow());
     state = State.IDLE;
@@ -115,12 +118,12 @@ public class CassandraRowStreamImpl implements CassandraRowStream {
 
   @Override
   public ExecutionInfo executionInfo() {
-    return resultSet.getExecutionInfo();
+    return realResultSet.getExecutionInfo();
   }
 
   @Override
   public ColumnDefinitions columnDefinitions(){
-    return resultSet.getColumnDefinitions();
+    return realResultSet.getColumnDefinitions();
   }
 
   private synchronized void fetchRow() {
@@ -129,31 +132,31 @@ public class CassandraRowStreamImpl implements CassandraRowStream {
     }
 
     if (resultSet.remaining() > 0) {
-      handleFetched(resultSet.one());
+      handleFetched(resultSet.getRealResultSet(), resultSet.one());
     } else {
       if (resultSet.hasMorePages()) {
         resultSet.fetchNextPage().map(rs -> resultSet.one())
           .onComplete(event -> {
             if (event.succeeded()) {
-              handleFetched(event.result());
+              handleFetched(resultSet.getRealResultSet(), event.result());
             } else {
               handleException(event.cause());
             }
           });
       } else {
         // last row
-        handleFetched(null);
+        handleFetched(resultSet.getRealResultSet(), null);
       }
     }
   }
 
-  private synchronized void handleFetched(Row row) {
+  private synchronized void handleFetched(AsyncResultSet realResultSet, Row row) {
     if (state == State.STOPPED) {
       return;
     }
     if (row != null) {
       inFlight++;
-      if (internalQueue.write(row)) {
+      if (internalQueue.write(new RowResultSet(realResultSet, row))) {
         context.runOnContext(v -> fetchRow());
       }
     } else {
@@ -165,14 +168,15 @@ public class CassandraRowStreamImpl implements CassandraRowStream {
     }
   }
 
-  private void handleRow(Row row) {
+  private void handleRow(RowResultSet rowResultSet) {
     synchronized (this) {
       if (state == State.STOPPED) {
         return;
       }
       inFlight--;
+      this.realResultSet = rowResultSet.getRealResultSet();
     }
-    handler.handle(row);
+    handler.handle(rowResultSet.getRow());
     synchronized (this) {
       if (state == State.EXHAUSTED && inFlight == 0) {
         stop();

@@ -108,6 +108,11 @@ public class ResultSetImpl implements ResultSet {
     return resultSetRef.get().wasApplied();
   }
 
+  @Override
+  public com.datastax.oss.driver.api.core.cql.AsyncResultSet getRealResultSet() {
+    return resultSetRef.get();
+  }
+
   private void loadMore(Context context, List<Row> loaded, Handler<AsyncResult<List<Row>>> handler) {
     int availableWithoutFetching = resultSetRef.get().remaining();
     List<Row> rows = new ArrayList<>(loaded.size() + availableWithoutFetching);

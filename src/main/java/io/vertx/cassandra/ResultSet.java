@@ -93,7 +93,7 @@ public interface ResultSet {
   void fetchNextPage(Handler<AsyncResult<ResultSet>> handler);
 
   /**
-   * @see AsyncResultSet#wasApplied()
+   * @see AsyncResultSet#fetchNextPage()
    */
   Future<ResultSet> fetchNextPage() throws IllegalStateException;
 
@@ -101,4 +101,12 @@ public interface ResultSet {
    * @see AsyncResultSet#wasApplied()
    */
   boolean wasApplied();
+
+  /**
+   * Useful for advanced users who need to access
+   * the real {@link com.datastax.oss.driver.api.core.cql.AsyncResultSet} instance.
+   * @return the real {@link com.datastax.oss.driver.api.core.cql.AsyncResultSet} instance
+   */
+  @GenIgnore
+  com.datastax.oss.driver.api.core.cql.AsyncResultSet getRealResultSet();
 }
